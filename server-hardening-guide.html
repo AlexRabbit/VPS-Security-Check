@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Server hardening guide: SSH, firewall, fail2ban, and access control. Editorial reference.">
+  <title>Server Hardening Guide · Archival Reference</title>
+  <style>
+    :root {
+      --bg-deep: #0c0a0b;
+      --bg-surface: rgba(18, 15, 17, 0.6);
+      --glass: rgba(255, 255, 255, 0.04);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --glass-strong: rgba(255, 255, 255, 0.07);
+      --gold: #d4a853;
+      --gold-soft: rgba(212, 168, 83, 0.85);
+      --frost: rgba(255, 252, 250, 0.92);
+      --pink: #ff9ecd;
+      --pink-soft: rgba(255, 158, 205, 0.4);
+      --text: #f5f0ed;
+      --text-muted: rgba(245, 240, 237, 0.65);
+      --blur: 20px;
+      --radius: 24px;
+      --radius-sm: 14px;
+      --font: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'DM Sans', sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg-deep);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* Bubbles */
+    .bubbles {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .bubble {
+      position: absolute;
+      border-radius: 50%;
+      background: radial-gradient(circle at 30% 30%, var(--pink-soft), transparent 70%);
+      opacity: 0.5;
+      animation: float linear infinite;
+    }
+    .bubble:nth-child(1) { width: 120px; height: 120px; left: 8%; top: 12%; animation-duration: 22s; animation-delay: 0s; }
+    .bubble:nth-child(2) { width: 80px; height: 80px; left: 75%; top: 8%; animation-duration: 18s; animation-delay: -5s; }
+    .bubble:nth-child(3) { width: 160px; height: 160px; left: 45%; top: 70%; animation-duration: 28s; animation-delay: -10s; }
+    .bubble:nth-child(4) { width: 60px; height: 60px; left: 20%; top: 55%; animation-duration: 15s; animation-delay: -2s; }
+    .bubble:nth-child(5) { width: 100px; height: 100px; left: 85%; top: 45%; animation-duration: 25s; animation-delay: -7s; }
+    .bubble:nth-child(6) { width: 140px; height: 140px; left: 5%; top: 80%; animation-duration: 30s; animation-delay: -12s; }
+    .bubble:nth-child(7) { width: 70px; height: 70px; left: 60%; top: 25%; animation-duration: 20s; animation-delay: -3s; }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(15px, -20px) scale(1.05); }
+      50% { transform: translate(-10px, 15px) scale(0.98); }
+      75% { transform: translate(20px, 10px) scale(1.02); }
+    }
+
+    .wrap {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: clamp(2rem, 6vw, 4rem) clamp(1.5rem, 4vw, 2.5rem);
+    }
+
+    /* Editorial header */
+    .mast {
+      margin-bottom: clamp(2.5rem, 8vw, 4rem);
+      padding-left: 0.1em;
+    }
+    .mast .label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--pink);
+      margin-bottom: 0.5rem;
+    }
+    .mast h1 {
+      font-size: clamp(2rem, 5vw, 2.75rem);
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--frost) 0%, var(--gold-soft) 50%, var(--pink) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+      max-width: 14ch;
+    }
+    .mast p {
+      margin-top: 1rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      max-width: 32ch;
+    }
+
+    /* Glass cards — Glassmorphism 2.0 */
+    .card {
+      background: var(--glass);
+      backdrop-filter: blur(var(--blur));
+      -webkit-backdrop-filter: blur(var(--blur));
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: clamp(1.25rem, 4vw, 1.75rem);
+      margin-bottom: clamp(1.25rem, 4vw, 1.75rem);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.05), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+      transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease, border-color 0.35s ease;
+      animation: cardIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    }
+    .card:nth-child(1) { animation-delay: 0.05s; }
+    .card:nth-child(2) { animation-delay: 0.12s; }
+    .card:nth-child(3) { animation-delay: 0.19s; }
+    .card:nth-child(4) { animation-delay: 0.26s; }
+    .card:nth-child(5) { animation-delay: 0.33s; }
+    .card:nth-child(6) { animation-delay: 0.4s; }
+    @keyframes cardIn {
+      from { opacity: 0; transform: translateY(16px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .card:hover {
+      transform: translateY(-3px) scale(1.005);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.08);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+    .card:nth-child(odd) { margin-left: 0; }
+    .card:nth-child(even) { margin-left: clamp(0rem, 5vw, 3rem); }
+
+    .card .num {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
+    .card h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: var(--frost);
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    .card p {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+    }
+    .card code,
+    .card .block {
+      display: block;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
+      padding: 0.9rem 1rem;
+      font-family: ui-monospace, 'Cascadia Code', 'SF Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--frost);
+      overflow-x: auto;
+      margin-top: 0.5rem;
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
+    .card code { display: inline; padding: 0.2em 0.45em; margin: 0 0.1em; }
+    .card .block:hover {
+      background: rgba(0, 0, 0, 0.45);
+      border-color: rgba(255, 255, 255, 0.1);
+    }
+    .card .hint {
+      font-size: 0.8rem;
+      color: var(--pink-soft);
+      margin-top: 0.6rem;
+    }
+
+    /* Placeholder styling */
+    .ph {
+      color: var(--pink);
+      font-weight: 700;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--glass-border), transparent);
+      margin: 2rem 0;
+    }
+
+    /* Footer */
+    .foot {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--glass-border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .foot a {
+      color: var(--gold);
+      text-decoration: none;
+      transition: color 0.2s ease;
+    }
+    .foot a:hover {
+      color: var(--pink);
+    }
+
+    .block {
+      cursor: pointer;
+      position: relative;
+      user-select: none;
+    }
+    .block::after {
+      content: 'click to copy';
+      display: block;
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      opacity: 0.6;
+      transition: opacity 0.25s ease;
+    }
+    .block.copied::after {
+      content: 'Copied!';
+      color: var(--pink);
+      opacity: 1;
+    }
+    .block:focus {
+      outline: none;
+      border-color: var(--pink-soft);
+      box-shadow: 0 0 0 1px var(--pink-soft);
+    }
+    .block:hover::after { opacity: 1; }
+    .card .why { margin-bottom: 0.75rem; }
+    .card .what { font-size: 0.85rem; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="bubbles" aria-hidden="true">
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+    <span class="bubble"></span>
+  </div>
+
+  <main class="wrap">
+    <header class="mast">
+      <p class="label">Archival index · server security</p>
+      <h1>Hardening reference</h1>
+      <p>This page explains how to make your Linux server safer, step by step. Everything is written so even a total beginner can follow. Click any gray code box to copy the command. Before you run anything, replace the pink words with your real info.</p>
+    </header>
+
+    <section class="card">
+      <p class="num">01</p>
+      <h2>Update your server (like updating your phone)</h2>
+      <p class="why"><strong>Why?</strong> Your server has software on it. That software can have holes that bad people use. When you “update,” you get the fixed versions. Do this first and do it often.</p>
+      <p class="what"><strong>What to do:</strong> Run this one command on the server. It does two things: first it gets the list of latest stuff, then it installs the updates. The <code>-y</code> means “yes to everything” so it doesn’t stop to ask you.</p>
+      <div class="block" tabindex="0">sudo apt-get update && sudo apt-get upgrade -y</div>
+    </section>
+
+    <section class="card">
+      <p class="num">02</p>
+      <h2>Change the SSH door (so robots can’t find it)</h2>
+      <p class="why"><strong>Why?</strong> By default, everyone connects to your server on “door” number 22. Bots on the internet constantly knock on door 22. If you use a different door (a different port), most of them never find you.</p>
+      <p class="what"><strong>What to do:</strong> Pick a port number (e.g. 22022). Everywhere you see <span class="ph">YOUR_PORT</span>, type your number instead. Run the commands in order. The first two lines change the config file. The next block stops the old “door 22” and starts SSH on your new door. The last block tells the firewall: “allow my new door, block the old one.”</p>
+      <p class="what">After this, you always connect with: <code>ssh root@YOUR_SERVER_IP -p YOUR_PORT</code>. <span class="ph">YOUR_SERVER_IP</span> = your server’s IP address.</p>
+      <div class="block" tabindex="0">sudo sed -i 's/^#*Port .*/Port YOUR_PORT/' /etc/ssh/sshd_config</div>
+      <div class="block" tabindex="0">grep -q "^Port " /etc/ssh/sshd_config || echo "Port YOUR_PORT" | sudo tee -a /etc/ssh/sshd_config</div>
+      <div class="block" tabindex="0">sudo systemctl stop ssh.socket<br>sudo systemctl disable ssh.socket<br>sudo systemctl enable ssh<br>sudo systemctl start ssh</div>
+      <div class="block" tabindex="0">sudo ufw allow YOUR_PORT/tcp<br>sudo ufw deny 22/tcp</div>
+      <p class="hint">To check it worked: run <code>ss -tlnp | grep ssh</code> on the server. You should see your port number, not 22.</p>
+    </section>
+
+    <section class="card">
+      <p class="num">03</p>
+      <h2>Turn on the firewall (the bouncer)</h2>
+      <p class="why"><strong>Why?</strong> A firewall is like a bouncer: it only lets in traffic you said is OK. You already said “allow my SSH port” in step 2. Now we switch the bouncer on.</p>
+      <p class="what"><strong>What to do:</strong> Make sure you’re connected with your new port (step 2) before you run this. Then run the command below. It will ask “may I turn on the firewall?” — type <code>y</code> and Enter.</p>
+      <div class="block" tabindex="0">sudo ufw enable</div>
+      <p class="hint">To see the rules: <code>sudo ufw status</code></p>
+    </section>
+
+    <section class="card">
+      <p class="num">04</p>
+      <h2>Only allow your computer to SSH (guest list)</h2>
+      <p class="why"><strong>Why?</strong> Right now, anyone on the internet can try to log in (they’ll hit the firewall and fail2ban, but we can do better). We tell the server: “only accept SSH from this one IP address — mine.” So even if someone knows your port, if they’re not from your IP, they’re not on the list.</p>
+      <p class="what"><strong>Your “public” IP:</strong> It’s the address the internet sees when you go online from home (like 203.0.113.45). It is NOT 192.168.x.x — that’s only inside your house. To find your public IP, on your own PC run: <code>curl -s ifconfig.me</code> (or open whatismyip.com).</p>
+      <p class="what"><strong>What to do:</strong> Replace <span class="ph">YOUR_PUBLIC_IP</span> with that number. Run the first command (add yourself to the allow list), then the second (block everyone else). Order matters: allow yourself first, then deny ALL.</p>
+      <div class="block" tabindex="0">echo "sshd: YOUR_PUBLIC_IP" | sudo tee -a /etc/hosts.allow</div>
+      <div class="block" tabindex="0">echo "sshd: ALL" | sudo tee -a /etc/hosts.deny</div>
+      <p class="hint">If your home IP changes later (many ISPs do that), run the first command again with the new IP or you’ll lock yourself out. Keep your host’s “web console” or “recovery” so you can fix it if that happens.</p>
+    </section>
+
+    <section class="card">
+      <p class="num">05</p>
+      <h2>Install Fail2ban (auto-block people who guess passwords)</h2>
+      <p class="why"><strong>Why?</strong> Somebody can try thousands of passwords on your SSH. Fail2ban watches the logs: “This IP failed 5 times? Block it for an hour.” So bots and script-kiddies get banned automatically.</p>
+      <p class="what"><strong>What to do:</strong> First install fail2ban. Then create a config file so it watches SSH on <em>your</em> port and doesn’t ban you. Replace <span class="ph">YOUR_PORT</span> with the same port from step 2, and <span class="ph">YOUR_PUBLIC_IP</span> with your IP. The <code>ignoreip</code> line means “never ban these” (your IP + localhost).</p>
+      <p class="what">You can create the file with: <code>sudo nano /etc/fail2ban/jail.local</code> and paste the config, or use a single command to write it (replace the placeholders in that command). Then start fail2ban and check that the “sshd” jail is active.</p>
+      <div class="block" tabindex="0">sudo apt-get update && sudo apt-get install -y fail2ban</div>
+      <p class="hint">Contents of /etc/fail2ban/jail.local (replace YOUR_PORT and YOUR_PUBLIC_IP):</p>
+      <div class="block" tabindex="0">[DEFAULT]<br>bantime = 1h<br>findtime = 10m<br>maxretry = 5<br><br>[sshd]<br>enabled = true<br>port = YOUR_PORT<br>filter = sshd<br>logpath = /var/log/auth.log<br>maxretry = 5<br>ignoreip = 127.0.0.1/8 ::1 YOUR_PUBLIC_IP</div>
+      <div class="block" tabindex="0">sudo systemctl enable fail2ban<br>sudo systemctl restart fail2ban<br>sleep 3 && sudo fail2ban-client status sshd</div>
+    </section>
+
+    <section class="card">
+      <p class="num">06</p>
+      <h2>Limit wrong passwords per try (MaxAuthTries)</h2>
+      <p class="why"><strong>Why?</strong> When you type the wrong password, the server lets you try again. If we say “only 3 wrong tries,” after the third wrong password it kicks that connection off. So one connection can’t try 100 passwords — they get 3 and then they’re out.</p>
+      <p class="what"><strong>What to do:</strong> This sets the limit to 3. Run the first block (it adds or updates the line in the config), then restart SSH so it uses the new setting.</p>
+      <div class="block" tabindex="0">grep -q '^MaxAuthTries ' /etc/ssh/sshd_config && sudo sed -i 's/^MaxAuthTries .*/MaxAuthTries 3/' /etc/ssh/sshd_config || echo "MaxAuthTries 3" | sudo tee -a /etc/ssh/sshd_config</div>
+      <div class="block" tabindex="0">sudo systemctl restart ssh</div>
+    </section>
+
+    <div class="divider"></div>
+    <footer class="foot">
+      <strong>Remember:</strong> <span class="ph">YOUR_SERVER_IP</span> = your server’s IP. <span class="ph">YOUR_PORT</span> = the SSH port you chose (e.g. 22022). <span class="ph">YOUR_PUBLIC_IP</span> = the IP of your home/office (from curl -s ifconfig.me). Always have a way to get in without SSH (your host’s web console or recovery) in case you lock yourself out.
+    </footer>
+  </main>
+  <script>
+    document.querySelectorAll('.block').forEach(function(block) {
+      block.addEventListener('click', function() {
+        var raw = block.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+        var div = document.createElement('div');
+        div.innerHTML = raw;
+        var text = (div.textContent || div.innerText || '').trim();
+        navigator.clipboard.writeText(text).then(function() {
+          block.classList.add('copied');
+          setTimeout(function() { block.classList.remove('copied'); }, 2000);
+        });
+      });
+    });
+  </script>
+</body>
+</html>
